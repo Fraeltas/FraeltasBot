@@ -14,13 +14,11 @@ estados = [
     ("Viendo las olas 🌊", discord.ActivityType.watching)
 ]
 
-
 @bot.event
 async def on_ready():
     synced = await bot.tree.sync()
     print(f"Bot conectado como {bot.user}")
     print(f"Comandos slash sincronizados: {[cmd.name for cmd in synced]}")
-    print(f"Bot conectado como {bot.user}")
     # Inicia el loop que cambia el estado
     cambiar_estado.start()
 
@@ -36,12 +34,17 @@ async def cambiar_estado():
 # Comando /hilos
 @bot.tree.command(name="hilos", description="Crear un hilo con título, mensaje y archivo")
 async def hilos(interaction: discord.Interaction, titulo: str, mensaje: str, archivo: discord.Attachment = None):
+    # Construir contenido
     content = mensaje
     if archivo:
         content += f"\nArchivo: {archivo.url}"
 
-    msg = await interaction.channel.send(content)
+    # Responder al slash command con un mensaje visible en el canal
+    await interaction.response.send_message(content)
+    # Obtener el mensaje recién enviado
+    msg = await interaction.original_response()
+    # Crear el hilo desde ese mensaje
     await msg.create_thread(name=titulo)
-    await interaction.response.send_message(f"Hilo **{titulo}** creado ✅", ephemeral=True)
+
 # Ejecutar bot
 bot.run(os.getenv("DISCORD_TOKEN"))
