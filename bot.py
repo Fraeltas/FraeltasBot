@@ -2,7 +2,7 @@ import os
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from mcstatus.server import MinecraftServer  # librería para ping al server
+from mcstatus import JavaServer  # librería para ping al server
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -16,7 +16,7 @@ estados = [
 ]
 
 # Configuración del server de Minecraft
-server = MinecraftServer.lookup("CochinitosLand4.exaroton.me:61042")
+server = JavaServer.lookup("CochinitosLand4.exaroton.me:61042")
 CANAL_ID = 1499557785363550228
 estado_anterior = None
 
