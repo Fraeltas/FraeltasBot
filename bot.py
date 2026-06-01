@@ -18,7 +18,7 @@ estados = [
 
 # Configuración del server
 server = JavaServer.lookup("CochinitosLand4.exaroton.me:61042")
-CANAL_ID = 1499557785363550228
+CANAL_ID = "id de canal"
 estado_anterior = None  # inicializado
 
 @bot.event
