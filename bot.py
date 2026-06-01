@@ -19,7 +19,7 @@ estados = [
 # Configuración del server
 server = JavaServer.lookup("CochinitosLand4.exaroton.me:61042")
 CANAL_ID = 1499557785363550228
-estado_anterior = None
+estado_anterior = None  # inicializado
 
 @bot.event
 async def on_ready():
@@ -29,6 +29,7 @@ async def on_ready():
     cambiar_estado.start()
     check_server.start()
 
+# Loop que rota estado del bot cada hora
 @tasks.loop(hours=1)
 async def cambiar_estado():
     texto, tipo = estados[cambiar_estado.current_loop % len(estados)]
@@ -37,14 +38,17 @@ async def cambiar_estado():
         status=discord.Status.online
     )
 
+# Loop que revisa el server cada minuto
 @tasks.loop(minutes=1)
 async def check_server():
     global estado_anterior
     canal = bot.get_channel(CANAL_ID)
+
     try:
         status = server.status()
         jugadores = status.players.sample
 
+        # Solo avisa si cambió a ONLINE
         if estado_anterior != "online":
             if jugadores:
                 lista = "\n".join([p.name for p in jugadores])
@@ -53,24 +57,25 @@ async def check_server():
                 descripcion = f"🟢 El server está **ONLINE** con {status.players.online} jugadores."
 
             embed = discord.Embed(
-                title="💎⚔️-𝐏𝐎𝐖𝐄𝐑𝐋𝐀𝐍𝐃-⛏️💎",
+                title="💎⚔️-POWERLAND-⛏️💎",
                 description=descripcion,
                 color=discord.Color.green()
             )
-            embed.set_thumbnail(url="https://static.wikia.nocookie.net/minecraft_gamepedia/images/5/5e/Grass_Block_JE5_BE3.png")  # Logo Minecraft
+            embed.set_thumbnail(url="https://i.imgur.com/8KZgk0z.png")  # Bloque césped Minecraft
             embed.set_footer(text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}")
             await canal.send(embed=embed)
 
         estado_anterior = "online"
 
-    except:
+    except Exception:
+        # Solo avisa si cambió a OFFLINE
         if estado_anterior != "offline":
             embed = discord.Embed(
-                title="💎⚔️-𝐏𝐎𝐖𝐄𝐑𝐋𝐀𝐍𝐃-⛏️💎",
+                title="💎⚔️-POWERLAND-⛏️💎",
                 description="🔴 El server está **OFFLINE**.",
                 color=discord.Color.red()
             )
-            embed.set_thumbnail(url="https://static.wikia.nocookie.net/minecraft_gamepedia/images/5/5e/Grass_Block_JE5_BE3.png")  # Logo Minecraft
+            embed.set_thumbnail(url="https://i.imgur.com/8KZgk0z.png")  # Bloque césped Minecraft
             embed.set_footer(text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}")
             await canal.send(embed=embed)
 
