@@ -16,23 +16,27 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 SERVER_ADDRESS = "CochinitosLand4.exaroton.me:61042"
 CANAL_ID = 1511035429623959706
 
-# Estados rotativos
+MAX_FALLOS = 5
+
+# ==========================
+# VARIABLES
+# ==========================
+
+estado_anterior = None
+fallos_consecutivos = 0
+
+# ==========================
+# ESTADOS ROTATIVOS
+# ==========================
+
 estados = [
     ("Esta pescando UwU 🐟", discord.ActivityType.playing),
     ("Escuchando tus mentiras 🎧", discord.ActivityType.listening),
     ("Viendo las olas 🌊", discord.ActivityType.watching)
 ]
 
-# Variables globales
-estado_anterior = None
-fallos_consecutivos = 0
-
-# Más tolerancia a microcortes
-MAX_FALLOS = 5
-
-
 # ==========================
-# EVENTO READY
+# READY
 # ==========================
 
 @bot.event
@@ -45,7 +49,6 @@ async def on_ready():
     cambiar_estado.start()
     check_server.start()
 
-
 # ==========================
 # ESTADO DEL BOT
 # ==========================
@@ -55,10 +58,12 @@ async def cambiar_estado():
     texto, tipo = estados[cambiar_estado.current_loop % len(estados)]
 
     await bot.change_presence(
-        activity=discord.Activity(type=tipo, name=texto),
+        activity=discord.Activity(
+            type=tipo,
+            name=texto
+        ),
         status=discord.Status.online
     )
-
 
 # ==========================
 # MONITOR MINECRAFT
@@ -72,35 +77,51 @@ async def check_server():
     canal = bot.get_channel(CANAL_ID)
 
     try:
-        # Crear conexión nueva cada vez
+
         server = JavaServer.lookup(SERVER_ADDRESS)
 
         status = server.status()
 
-        version_name = status.raw.get("version", {}).get("name","")
-
-        if "offline" in version_name.lower():
-            raise Exception("Exaroton reporta servidor OFFLINE")
-
-        # LOGS DE DEPURACIÓN
         print("\n" + "=" * 60)
         print("RESPUESTA DEL SERVIDOR")
         print(f"Latencia: {status.latency:.0f} ms")
         print(status.raw)
         print("=" * 60)
 
-        # Reiniciar contador porque respondió
+        protocol = (
+            status.raw
+            .get("version", {})
+            .get("protocol")
+        )
+
+        version_name = str(
+            status.raw
+            .get("version", {})
+            .get("name", "")
+        ).lower()
+
+        # Exaroton responde aunque esté apagado
+        if protocol == -1:
+            raise Exception(
+                "Exaroton reporta servidor OFFLINE"
+            )
+
+        if "offline" in version_name:
+            raise Exception(
+                f"Version reporta OFFLINE: {version_name}"
+            )
+
         fallos_consecutivos = 0
 
-        # Solo avisar si cambió a ONLINE
         if estado_anterior != "online":
 
             jugadores = status.players.sample
 
             if jugadores:
+
                 lista = "\n".join(
-                    f"• {jugador.name}"
-                    for jugador in jugadores
+                    f"• {j.name}"
+                    for j in jugadores
                 )
 
                 descripcion = (
@@ -111,6 +132,7 @@ async def check_server():
                 )
 
             else:
+
                 descripcion = (
                     f"🟢 El servidor está **ONLINE**\n\n"
                     f"👥 Jugadores conectados: "
@@ -145,9 +167,9 @@ async def check_server():
             f"\n❌ Error consultando servidor "
             f"({fallos_consecutivos}/{MAX_FALLOS})"
         )
+
         print(e)
 
-        # Solo marcar OFFLINE después de varios fallos seguidos
         if fallos_consecutivos >= MAX_FALLOS:
 
             if estado_anterior != "offline":
@@ -171,7 +193,6 @@ async def check_server():
                 print("🔴 CAMBIO A OFFLINE")
 
             estado_anterior = "offline"
-
 
 # ==========================
 # COMANDO HILOS
@@ -199,9 +220,8 @@ async def hilos(
 
     await msg.create_thread(name=titulo)
 
-
 # ==========================
-# INICIO DEL BOT
+# INICIO
 # ==========================
 
 bot.run(os.getenv("DISCORD_TOKEN"))
