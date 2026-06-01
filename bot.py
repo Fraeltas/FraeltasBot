@@ -77,6 +77,11 @@ async def check_server():
 
         status = server.status()
 
+        version_name = status.raw.get("version", {}).get("name","")
+
+        if "offline" in version_name.lower():
+            raise Exception("Exaroton reporta servidor OFFLINE")
+
         # LOGS DE DEPURACIÓN
         print("\n" + "=" * 60)
         print("RESPUESTA DEL SERVIDOR")
