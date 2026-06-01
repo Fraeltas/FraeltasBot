@@ -1,94 +1,194 @@
 import os
 import discord
-from discord import app_commands
 from discord.ext import commands, tasks
 from mcstatus import JavaServer
 from datetime import datetime
 
 intents = discord.Intents.default()
 intents.message_content = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Estados rotativos cada hora
+# ==========================
+# CONFIGURACIÓN
+# ==========================
+
+SERVER_ADDRESS = "CochinitosLand4.exaroton.me:61042"
+CANAL_ID = 1511035429623959706
+
+# Estados rotativos
 estados = [
     ("Esta pescando UwU 🐟", discord.ActivityType.playing),
-    ("Escuchando tus mentiras", discord.ActivityType.listening),
+    ("Escuchando tus mentiras 🎧", discord.ActivityType.listening),
     ("Viendo las olas 🌊", discord.ActivityType.watching)
 ]
 
-# Configuración del server
-server = JavaServer.lookup("CochinitosLand4.exaroton.me:61042")
-CANAL_ID = "id de canal"
-estado_anterior = None  # inicializado
+# Variables globales
+estado_anterior = None
+fallos_consecutivos = 0
+
+# Cuántos fallos seguidos se necesitan para declarar OFFLINE
+MAX_FALLOS = 3
+
+
+# ==========================
+# EVENTO READY
+# ==========================
 
 @bot.event
 async def on_ready():
     synced = await bot.tree.sync()
+
     print(f"Bot conectado como {bot.user}")
-    print(f"Comandos slash sincronizados: {[cmd.name for cmd in synced]}")
+    print(f"Comandos sincronizados: {[cmd.name for cmd in synced]}")
+
     cambiar_estado.start()
     check_server.start()
 
-# Loop que rota estado del bot cada hora
+
+# ==========================
+# ESTADO DEL BOT
+# ==========================
+
 @tasks.loop(hours=1)
 async def cambiar_estado():
     texto, tipo = estados[cambiar_estado.current_loop % len(estados)]
+
     await bot.change_presence(
         activity=discord.Activity(type=tipo, name=texto),
         status=discord.Status.online
     )
 
-# Loop que revisa el server cada minuto
+
+# ==========================
+# MONITOR MINECRAFT
+# ==========================
+
 @tasks.loop(minutes=1)
 async def check_server():
     global estado_anterior
+    global fallos_consecutivos
+
     canal = bot.get_channel(CANAL_ID)
 
     try:
-        status = server.status()
-        jugadores = status.players.sample
+        # Crear nueva conexión cada vez
+        server = JavaServer.lookup(SERVER_ADDRESS)
 
-        # Solo avisa si cambió a ONLINE
+        status = server.status()
+
+        # Si respondió, reiniciamos contador
+        fallos_consecutivos = 0
+
+        # Solo avisar si cambió a ONLINE
         if estado_anterior != "online":
+
+            jugadores = status.players.sample
+
             if jugadores:
-                lista = "\n".join([p.name for p in jugadores])
-                descripcion = f"🟢 El server está **ONLINE** con {status.players.online} jugadores:\n{lista}"
+                lista = "\n".join(
+                    f"• {jugador.name}"
+                    for jugador in jugadores
+                )
+
+                descripcion = (
+                    f"🟢 El servidor está **ONLINE**\n\n"
+                    f"👥 Jugadores conectados: "
+                    f"**{status.players.online}**\n\n"
+                    f"{lista}"
+                )
+
             else:
-                descripcion = f"🟢 El server está **ONLINE** con {status.players.online} jugadores."
+                descripcion = (
+                    f"🟢 El servidor está **ONLINE**\n\n"
+                    f"👥 Jugadores conectados: "
+                    f"**{status.players.online}**"
+                )
 
             embed = discord.Embed(
-                title="💎⚔️-POWERLAND-⛏️💎",
+                title="💎⚔️ POWERLAND ⛏️💎",
                 description=descripcion,
                 color=discord.Color.green()
             )
-            embed.set_thumbnail(url="https://i.imgur.com/8KZgk0z.png")  # Bloque césped Minecraft
-            embed.set_footer(text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}")
+
+            embed.set_thumbnail(
+                url="https://i.imgur.com/pN1CGqk.jpeg"
+            )
+
+            embed.set_footer(
+                text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}"
+            )
+
             await canal.send(embed=embed)
+
+            print("Servidor ONLINE detectado.")
 
         estado_anterior = "online"
 
-    except Exception:
-        # Solo avisa si cambió a OFFLINE
-        if estado_anterior != "offline":
-            embed = discord.Embed(
-                title="💎⚔️-POWERLAND-⛏️💎",
-                description="🔴 El server está **OFFLINE**.",
-                color=discord.Color.red()
-            )
-            embed.set_thumbnail(url="https://i.imgur.com/8KZgk0z.png")  # Bloque césped Minecraft
-            embed.set_footer(text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}")
-            await canal.send(embed=embed)
+    except Exception as e:
 
-        estado_anterior = "offline"
+        fallos_consecutivos += 1
 
-# Comando /hilos
-@bot.tree.command(name="hilos", description="Crear un hilo con título, mensaje y archivo")
-async def hilos(interaction: discord.Interaction, titulo: str, mensaje: str, archivo: discord.Attachment = None):
-    content = mensaje
+        print(
+            f"Error consultando servidor "
+            f"({fallos_consecutivos}/{MAX_FALLOS})"
+        )
+
+        # Solo marcar OFFLINE tras varios fallos seguidos
+        if fallos_consecutivos >= MAX_FALLOS:
+
+            if estado_anterior != "offline":
+
+                embed = discord.Embed(
+                    title="💎⚔️ POWERLAND ⛏️💎",
+                    description="🔴 El servidor está **OFFLINE**.",
+                    color=discord.Color.red()
+                )
+
+                embed.set_thumbnail(
+                    url="https://i.imgur.com/pN1CGqk.jpeg"
+                )
+
+                embed.set_footer(
+                    text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}"
+                )
+
+                await canal.send(embed=embed)
+
+                print("Servidor OFFLINE detectado.")
+
+            estado_anterior = "offline"
+
+
+# ==========================
+# COMANDO HILOS
+# ==========================
+
+@bot.tree.command(
+    name="hilos",
+    description="Crear un hilo con título, mensaje y archivo"
+)
+async def hilos(
+    interaction: discord.Interaction,
+    titulo: str,
+    mensaje: str,
+    archivo: discord.Attachment = None
+):
+
+    contenido = mensaje
+
     if archivo:
-        content += f"\nArchivo: {archivo.url}"
-    await interaction.response.send_message(content)
+        contenido += f"\n{archivo.url}"
+
+    await interaction.response.send_message(contenido)
+
     msg = await interaction.original_response()
+
     await msg.create_thread(name=titulo)
+
+
+# ==========================
+# INICIO DEL BOT
+# ==========================
 
 bot.run(os.getenv("DISCORD_TOKEN"))

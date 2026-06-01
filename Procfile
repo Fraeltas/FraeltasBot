@@ -1,2 +1,1 @@
-perroloco
-
+worker: python bot.py
