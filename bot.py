@@ -14,7 +14,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ==========================
 
 SERVER_ADDRESS = "CochinitosLand4.exaroton.me:61042"
-CANAL_ID = 1511035429623959706
+CANAL_ID = 1499557785363550228
 
 MAX_FALLOS = 5
 
