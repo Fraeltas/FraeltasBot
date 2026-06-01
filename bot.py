@@ -27,8 +27,8 @@ estados = [
 estado_anterior = None
 fallos_consecutivos = 0
 
-# Cuántos fallos seguidos se necesitan para declarar OFFLINE
-MAX_FALLOS = 3
+# Más tolerancia a microcortes
+MAX_FALLOS = 5
 
 
 # ==========================
@@ -72,12 +72,19 @@ async def check_server():
     canal = bot.get_channel(CANAL_ID)
 
     try:
-        # Crear nueva conexión cada vez
+        # Crear conexión nueva cada vez
         server = JavaServer.lookup(SERVER_ADDRESS)
 
         status = server.status()
 
-        # Si respondió, reiniciamos contador
+        # LOGS DE DEPURACIÓN
+        print("\n" + "=" * 60)
+        print("RESPUESTA DEL SERVIDOR")
+        print(f"Latencia: {status.latency:.0f} ms")
+        print(status.raw)
+        print("=" * 60)
+
+        # Reiniciar contador porque respondió
         fallos_consecutivos = 0
 
         # Solo avisar si cambió a ONLINE
@@ -112,7 +119,7 @@ async def check_server():
             )
 
             embed.set_thumbnail(
-                url="https://i.imgur.com/pN1CGqk.jpeg"
+                url="https://i.imgur.com/V1dm5U6.jpeg"
             )
 
             embed.set_footer(
@@ -121,7 +128,7 @@ async def check_server():
 
             await canal.send(embed=embed)
 
-            print("Servidor ONLINE detectado.")
+            print("🟢 CAMBIO A ONLINE")
 
         estado_anterior = "online"
 
@@ -130,11 +137,12 @@ async def check_server():
         fallos_consecutivos += 1
 
         print(
-            f"Error consultando servidor "
+            f"\n❌ Error consultando servidor "
             f"({fallos_consecutivos}/{MAX_FALLOS})"
         )
+        print(e)
 
-        # Solo marcar OFFLINE tras varios fallos seguidos
+        # Solo marcar OFFLINE después de varios fallos seguidos
         if fallos_consecutivos >= MAX_FALLOS:
 
             if estado_anterior != "offline":
@@ -146,7 +154,7 @@ async def check_server():
                 )
 
                 embed.set_thumbnail(
-                    url="https://i.imgur.com/pN1CGqk.jpeg"
+                    url="https://i.imgur.com/V1dm5U6.jpeg"
                 )
 
                 embed.set_footer(
@@ -155,7 +163,7 @@ async def check_server():
 
                 await canal.send(embed=embed)
 
-                print("Servidor OFFLINE detectado.")
+                print("🔴 CAMBIO A OFFLINE")
 
             estado_anterior = "offline"
 
