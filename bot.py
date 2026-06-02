@@ -221,6 +221,118 @@ async def hilos(
     await msg.create_thread(name=titulo)
 
 # ==========================
+# COMANDO STATUS POWERLAND
+# ==========================
+
+@bot.tree.command(
+    name="statuspowerland",
+    description="Estado actual de Powerland"
+)
+async def statuspowerland(
+    interaction: discord.Interaction
+):
+
+    try:
+
+        server = JavaServer.lookup(
+            SERVER_ADDRESS
+        )
+
+        status = server.status()
+
+        protocol = (
+            status.raw
+            .get("version", {})
+            .get("protocol")
+        )
+
+        if protocol == -1:
+            raise Exception()
+
+        jugadores = status.players.sample
+
+        if jugadores:
+
+            lista = "\n".join(
+                f"🟢 {j.name}"
+                for j in jugadores
+            )
+
+        else:
+
+            lista = "🌙 No hay jugadores conectados"
+
+        embed = discord.Embed(
+            title="💎 POWERLAND STATUS 💎",
+            description="🟢 **Servidor ONLINE**",
+            color=discord.Color.green(),
+            timestamp=datetime.now()
+        )
+
+        embed.set_thumbnail(
+            url="https://imgur.com/a/mXZe51Z"
+        )
+
+        embed.add_field(
+            name="👥 Jugadores",
+            value=f"{status.players.online}/{status.players.max}",
+            inline=True
+        )
+
+        embed.add_field(
+            name="📡 Ping",
+            value=f"{status.latency:.0f} ms",
+            inline=True
+        )
+
+        embed.add_field(
+            name="🌐 Dirección",
+            value=SERVER_ADDRESS,
+            inline=False
+        )
+
+        embed.add_field(
+            name="🎮 Conectados",
+            value=lista,
+            inline=False
+        )
+
+        embed.set_footer(
+            text="Consultado desde FraeltasBot"
+        )
+
+        await interaction.response.send_message(
+            embed=embed
+        )
+
+    except:
+
+        embed = discord.Embed(
+            title="💎 POWERLAND STATUS 💎",
+            description="🔴 **Servidor OFFLINE**",
+            color=discord.Color.red(),
+            timestamp=datetime.now()
+        )
+
+        embed.set_thumbnail(
+            url="https://imgur.com/a/mXZe51Z"
+        )
+
+        embed.add_field(
+            name="🌐 Dirección",
+            value=SERVER_ADDRESS,
+            inline=False
+        )
+
+        embed.set_footer(
+            text="Consultado desde FraeltasBot"
+        )
+
+        await interaction.response.send_message(
+            embed=embed
+        )   
+
+# ==========================
 # INICIO
 # ==========================
 
