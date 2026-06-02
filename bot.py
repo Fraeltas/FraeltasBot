@@ -146,7 +146,7 @@ async def check_server():
             )
 
             embed.set_thumbnail(
-                url="https://i.imgur.com/V1dm5U6.jpeg"
+                url="https://i.imgur.com/rqFaiGG.jpeg"
             )
 
             embed.set_footer(
@@ -181,7 +181,7 @@ async def check_server():
                 )
 
                 embed.set_thumbnail(
-                    url="https://i.imgur.com/V1dm5U6.jpeg"
+                    url="https://i.imgur.com/rqFaiGG.jpeg"
                 )
 
                 embed.set_footer(
@@ -232,6 +232,8 @@ async def statuspowerland(
     interaction: discord.Interaction
 ):
 
+    print("COMANDO /statuspowerland EJECUTADO")
+
     try:
 
         server = JavaServer.lookup(
@@ -246,8 +248,21 @@ async def statuspowerland(
             .get("protocol")
         )
 
+        version_name = str(
+            status.raw
+            .get("version", {})
+            .get("name", "")
+        ).lower()
+
         if protocol == -1:
-            raise Exception()
+            raise Exception(
+                "Servidor reportado como OFFLINE"
+            )
+
+        if "offline" in version_name:
+            raise Exception(
+                "Servidor reportado como OFFLINE"
+            )
 
         jugadores = status.players.sample
 
@@ -263,14 +278,14 @@ async def statuspowerland(
             lista = "🌙 No hay jugadores conectados"
 
         embed = discord.Embed(
-            title="💎 POWERLAND STATUS 💎",
+            title="⚔️ Estado de Powerland ⚔️",
             description="🟢 **Servidor ONLINE**",
             color=discord.Color.green(),
             timestamp=datetime.now()
         )
 
         embed.set_thumbnail(
-            url="https://imgur.com/a/mXZe51Z"
+            url="https://i.imgur.com/rqFaiGG.jpeg"
         )
 
         embed.add_field(
@@ -282,6 +297,12 @@ async def statuspowerland(
         embed.add_field(
             name="📡 Ping",
             value=f"{status.latency:.0f} ms",
+            inline=True
+        )
+
+        embed.add_field(
+            name="🕒 Consulta",
+            value=datetime.now().strftime("%H:%M:%S"),
             inline=True
         )
 
@@ -305,17 +326,21 @@ async def statuspowerland(
             embed=embed
         )
 
-    except:
+    except Exception as e:
+
+        print(
+            f"Error en /statuspowerland: {e}"
+        )
 
         embed = discord.Embed(
-            title="💎 POWERLAND STATUS 💎",
+            title="⚔️ Estado de Powerland ⚔️",
             description="🔴 **Servidor OFFLINE**",
             color=discord.Color.red(),
             timestamp=datetime.now()
         )
 
         embed.set_thumbnail(
-            url="https://imgur.com/a/mXZe51Z"
+            url="https://i.imgur.com/rqFaiGG.jpeg"
         )
 
         embed.add_field(
@@ -324,14 +349,19 @@ async def statuspowerland(
             inline=False
         )
 
+        embed.add_field(
+            name="🕒 Consulta",
+            value=datetime.now().strftime("%H:%M:%S"),
+            inline=True
+        )
+
         embed.set_footer(
             text="Consultado desde FraeltasBot"
         )
 
         await interaction.response.send_message(
             embed=embed
-        )   
-
+        )
 # ==========================
 # INICIO
 # ==========================
