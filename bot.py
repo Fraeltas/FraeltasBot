@@ -228,54 +228,29 @@ async def hilos(
     name="statuspowerland",
     description="Estado actual de Powerland"
 )
-async def statuspowerland(
-    interaction: discord.Interaction
-):
+async def statuspowerland(interaction: discord.Interaction):
 
     print("COMANDO /statuspowerland EJECUTADO")
 
     try:
+        server = JavaServer.lookup(SERVER_ADDRESS)
 
-        server = JavaServer.lookup(
-            SERVER_ADDRESS
-        )
+        try:
+            status = server.status()
+        except Exception as e:
+            print(f"Primer intento falló: {e}, reintentando...")
+            # Reintento inmediato
+            server = JavaServer.lookup(SERVER_ADDRESS)
+            status = server.status()
 
-        status = server.status()
+        protocol = status.raw.get("version", {}).get("protocol")
+        version_name = str(status.raw.get("version", {}).get("name", "")).lower()
 
-        protocol = (
-            status.raw
-            .get("version", {})
-            .get("protocol")
-        )
-
-        version_name = str(
-            status.raw
-            .get("version", {})
-            .get("name", "")
-        ).lower()
-
-        if protocol == -1:
-            raise Exception(
-                "Servidor reportado como OFFLINE"
-            )
-
-        if "offline" in version_name:
-            raise Exception(
-                "Servidor reportado como OFFLINE"
-            )
+        if protocol == -1 or "offline" in version_name:
+            raise Exception("Servidor reportado como OFFLINE")
 
         jugadores = status.players.sample
-
-        if jugadores:
-
-            lista = "\n".join(
-                f"🟢 {j.name}"
-                for j in jugadores
-            )
-
-        else:
-
-            lista = "🌙 No hay jugadores conectados"
+        lista = "\n".join(f"🟢 {j.name}" for j in jugadores) if jugadores else "🌙 No hay jugadores conectados"
 
         embed = discord.Embed(
             title="⚔️ Estado de Powerland ⚔️",
@@ -283,85 +258,30 @@ async def statuspowerland(
             color=discord.Color.green(),
             timestamp=datetime.now()
         )
+        embed.set_thumbnail(url="https://i.imgur.com/rqFaiGG.jpeg")
+        embed.add_field(name="👥 Jugadores", value=f"{status.players.online}/{status.players.max}", inline=True)
+        embed.add_field(name="📡 Ping", value=f"{status.latency:.0f} ms", inline=True)
+        embed.add_field(name="🕒 Consulta", value=datetime.now().strftime("%H:%M:%S"), inline=True)
+        embed.add_field(name="🌐 Dirección", value=SERVER_ADDRESS, inline=False)
+        embed.add_field(name="🎮 Conectados", value=lista, inline=False)
+        embed.set_footer(text="Consultado desde FraeltasBot")
 
-        embed.set_thumbnail(
-            url="https://i.imgur.com/rqFaiGG.jpeg"
-        )
-
-        embed.add_field(
-            name="👥 Jugadores",
-            value=f"{status.players.online}/{status.players.max}",
-            inline=True
-        )
-
-        embed.add_field(
-            name="📡 Ping",
-            value=f"{status.latency:.0f} ms",
-            inline=True
-        )
-
-        embed.add_field(
-            name="🕒 Consulta",
-            value=datetime.now().strftime("%H:%M:%S"),
-            inline=True
-        )
-
-        embed.add_field(
-            name="🌐 Dirección",
-            value=SERVER_ADDRESS,
-            inline=False
-        )
-
-        embed.add_field(
-            name="🎮 Conectados",
-            value=lista,
-            inline=False
-        )
-
-        embed.set_footer(
-            text="Consultado desde FraeltasBot"
-        )
-
-        await interaction.response.send_message(
-            embed=embed
-        )
+        await interaction.response.send_message(embed=embed)
 
     except Exception as e:
-
-        print(
-            f"Error en /statuspowerland: {e}"
-        )
-
+        print(f"Error en /statuspowerland: {e}")
         embed = discord.Embed(
             title="⚔️ Estado de Powerland ⚔️",
             description="🔴 **Servidor OFFLINE**",
             color=discord.Color.red(),
             timestamp=datetime.now()
         )
+        embed.set_thumbnail(url="https://i.imgur.com/rqFaiGG.jpeg")
+        embed.add_field(name="🌐 Dirección", value=SERVER_ADDRESS, inline=False)
+        embed.add_field(name="🕒 Consulta", value=datetime.now().strftime("%H:%M:%S"), inline=True)
+        embed.set_footer(text="Consultado desde FraeltasBot")
+        await interaction.response.send_message(embed=embed)
 
-        embed.set_thumbnail(
-            url="https://i.imgur.com/rqFaiGG.jpeg"
-        )
-
-        embed.add_field(
-            name="🌐 Dirección",
-            value=SERVER_ADDRESS,
-            inline=False
-        )
-
-        embed.add_field(
-            name="🕒 Consulta",
-            value=datetime.now().strftime("%H:%M:%S"),
-            inline=True
-        )
-
-        embed.set_footer(
-            text="Consultado desde FraeltasBot"
-        )
-
-        await interaction.response.send_message(
-            embed=embed
-        )
 # ==========================
 # INICIO
 # ==========================
