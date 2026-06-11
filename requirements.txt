@@ -1,3 +1,5 @@
 discord.py
 mcstatus
 python-dotenv
+requests
+pytz

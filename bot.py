@@ -1,5 +1,7 @@
 import os
 import discord
+import requests
+import pytz
 from discord.ext import commands, tasks
 from mcstatus import JavaServer
 from datetime import datetime
@@ -281,6 +283,56 @@ async def statuspowerland(interaction: discord.Interaction):
         embed.add_field(name="🕒 Consulta", value=datetime.now().strftime("%H:%M:%S"), inline=True)
         embed.set_footer(text="Consultado desde FraeltasBot")
         await interaction.response.send_message(embed=embed)
+
+# ==========================
+# MUNDIAL26 COMANDO PARTIDOS HOY
+# ==========================
+
+@bot.tree.command(
+    name="partidoshoy",
+    description="Muestra los partidos del Mundial 2026 para hoy en hora de Lima"
+)
+async def partidoshoy(interaction: discord.Interaction):
+    try:
+        # Consulta a la API pública
+        response = requests.get("https://worldcup26.ir/get/games")
+        data = response.json()
+
+        # Zona horaria fija: Lima, Perú
+        tz_local = pytz.timezone("America/Lima")
+        hoy = datetime.now(tz_local).date()
+
+        descripcion = ""
+        for match in data:
+            # Convertir fecha del partido desde UTC
+            fecha_utc = datetime.fromisoformat(match["date"].replace("Z", "+00:00"))
+            fecha_local = fecha_utc.astimezone(tz_local)
+
+            # Filtrar solo los partidos de HOY
+            if fecha_local.date() == hoy:
+                descripcion += (
+                    f"⚽ {match['home']} vs {match['away']} "
+                    f"({fecha_local.strftime('%H:%M')})\n"
+                )
+
+        if not descripcion:
+            descripcion = "🌙 No hay partidos programados para hoy"
+
+        embed = discord.Embed(
+            title="📅 Partidos de Hoy - Mundial 2026",
+            description=descripcion,
+            color=discord.Color.gold()
+        )
+        embed.set_footer(text=f"Hora local: {tz_local.zone}")
+
+        await interaction.response.send_message(embed=embed)
+
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ Error obteniendo partidos: {e}",
+            ephemeral=True
+        )
+
 
 # ==========================
 # INICIO
