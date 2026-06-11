@@ -296,6 +296,7 @@ async def partidoshoy(interaction: discord.Interaction):
     try:
         # Consulta a la API pública
         response = requests.get("https://worldcup26.ir/get/games")
+        print(response.text)
         data = response.json()
 
         # Zona horaria fija: Lima, Perú
