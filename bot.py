@@ -288,6 +288,90 @@ async def statuspowerland(interaction: discord.Interaction):
 # MUNDIAL26 COMANDO PARTIDOS HOY
 # ==========================
 
+# Diccionario de estadios y sus zonas horarias
+stadium_timezones = {
+    "1": "America/Mexico_City",   # Estadio Azteca (CDMX)
+    "2": "America/Monterrey",     # Estadio BBVA (Monterrey)
+    "7": "America/Mexico_City",   # Estadio Akron (Guadalajara)
+    "10": "America/New_York",     # MetLife Stadium (Nueva Jersey)
+    "11": "America/Los_Angeles",  # SoFi Stadium (Los Ángeles)
+    "12": "America/Chicago",      # AT&T Stadium (Dallas)
+    "13": "America/Vancouver",    # BC Place (Vancouver)
+    "14": "America/Toronto",      # BMO Field (Toronto)
+    "15": "America/New_York",     # Gillette Stadium (Boston)
+    "16": "America/Chicago",      # Mercedes-Benz Stadium (Atlanta)
+    "3": "America/Chicago",       # NRG Stadium (Houston)
+    "4": "America/Chicago",       # Arrowhead Stadium (Kansas City)
+    "5": "America/Chicago",       # Soldier Field (Chicago)
+    "6": "America/Los_Angeles",   # Levi's Stadium (San Francisco)
+    "8": "America/New_York",      # Lincoln Financial Field (Philadelphia)
+    "9": "America/Orlando",       # Camping World Stadium (Orlando)
+}
+
+    # agrega más stadium_id según la lista oficial
+
+
+# Diccionario de banderas (ejemplo con algunos equipos)
+flags = {
+    "Mexico": "🇲🇽",
+    "South Africa": "🇿🇦",
+    "South Korea": "🇰🇷",
+    "Czech Republic": "🇨🇿",
+    "Canada": "🇨🇦",
+    "Bosnia and Herzegovina": "🇧🇦",
+    "United States": "🇺🇸",
+    "Paraguay": "🇵🇾",
+    "Brazil": "🇧🇷",
+    "Morocco": "🇲🇦",
+    "Argentina": "🇦🇷",
+    "Germany": "🇩🇪",
+    "Japan": "🇯🇵",
+    "Spain": "🇪🇸",
+    "Uruguay": "🇺🇾",
+    "England": "🇬🇧",
+    "France": "🇫🇷",
+    "Italy": "🇮🇹",
+    "Portugal": "🇵🇹",
+    "Netherlands": "🇳🇱",
+    "Belgium": "🇧🇪",
+    "Sweden": "🇸🇪",
+    "Norway": "🇳🇴",
+    "Denmark": "🇩🇰",
+    "Switzerland": "🇨🇭",
+    "Poland": "🇵🇱",
+    "Turkey": "🇹🇷",
+    "Egypt": "🇪🇬",
+    "Ivory Coast": "🇨🇮",
+    "Ecuador": "🇪🇨",
+    "Japan": "🇯🇵",
+    "Saudi Arabia": "🇸🇦",
+    "Iran": "🇮🇷",
+    "Qatar": "🇶🇦",
+    "Australia": "🇦🇺",
+    "New Zealand": "🇳🇿",
+    "South Korea": "🇰🇷",
+    "China": "🇨🇳",
+    "Russia": "🇷🇺",
+    "Ukraine": "🇺🇦",
+    "Scotland": "🏴",
+    "Ireland": "🇮🇪",
+    "Tunisia": "🇹🇳",
+    "Algeria": "🇩🇿",
+    "Senegal": "🇸🇳",
+    "Ghana": "🇬🇭",
+    "Panama": "🇵🇦",
+    "Japan": "🇯🇵",
+    "Cape Verde": "🇨🇻",
+    "Jordan": "🇯🇴",
+    "Croatia": "🇭🇷",
+    "Colombia": "🇨🇴",
+    "Chile": "🇨🇱",
+    "Peru": "🇵🇪",
+}
+
+    # puedes ir agregando más
+
+
 @bot.tree.command(
     name="partidoshoy",
     description="Muestra los partidos del Mundial 2026 para hoy en hora de Lima"
@@ -296,31 +380,35 @@ async def partidoshoy(interaction: discord.Interaction):
     try:
         response = requests.get("https://worldcup26.ir/get/games")
         data = response.json()
-
-        # La API devuelve un objeto con "games"
         games = data.get("games", [])
 
-        tz_local = pytz.timezone("America/Lima")
-        hoy = datetime.now(tz_local).date()
+        tz_lima = pytz.timezone("America/Lima")
+        hoy = datetime.now(tz_lima).date()
 
         descripcion = ""
         for match in games:
             fecha_str = match.get("local_date")
-            if not fecha_str:
+            stadium_id = match.get("stadium_id")
+            if not fecha_str or not stadium_id:
                 continue
 
             # Parsear fecha en formato MM/DD/YYYY HH:MM
             try:
-                fecha_local = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
-                fecha_local = tz_local.localize(fecha_local)
+                fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+                # Convertir desde la zona horaria de la sede a Lima
+                tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
+                fecha_local_sede = tz_sede.localize(fecha_local_sede)
+                fecha_lima = fecha_local_sede.astimezone(tz_lima)
             except Exception as e:
                 print(f"Error parseando fecha {fecha_str}: {e}")
                 continue
 
-            if fecha_local.date() == hoy:
+            if fecha_lima.date() == hoy:
                 home = match.get("home_team_name_en", "???")
                 away = match.get("away_team_name_en", "???")
-                descripcion += f"⚽ {home} vs {away} ({fecha_local.strftime('%H:%M')})\n"
+                flag_home = flags.get(home, "")
+                flag_away = flags.get(away, "")
+                descripcion += f"{flag_home} {home} vs {away} {flag_away} ({fecha_lima.strftime('%H:%M')})\n"
 
         if not descripcion:
             descripcion = "🌙 No hay partidos programados para hoy"
@@ -330,7 +418,7 @@ async def partidoshoy(interaction: discord.Interaction):
             description=descripcion,
             color=discord.Color.gold()
         )
-        embed.set_footer(text=f"Hora local: {tz_local.zone}")
+        embed.set_footer(text=f"Hora local: {tz_lima.zone}")
 
         await interaction.response.send_message(embed=embed)
 
