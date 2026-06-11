@@ -294,27 +294,27 @@ async def statuspowerland(interaction: discord.Interaction):
 )
 async def partidoshoy(interaction: discord.Interaction):
     try:
-        # Consulta a la API pública
         response = requests.get("https://worldcup26.ir/get/games")
-        print(response.text)
         data = response.json()
 
-        # Zona horaria fija: Lima, Perú
         tz_local = pytz.timezone("America/Lima")
         hoy = datetime.now(tz_local).date()
 
         descripcion = ""
         for match in data:
-            # Convertir fecha del partido desde UTC
-            fecha_utc = datetime.fromisoformat(match["date"].replace("Z", "+00:00"))
-            fecha_local = fecha_utc.astimezone(tz_local)
+            # La API devuelve local_date como string tipo "06/11/2026 13:00"
+            fecha_str = match.get("local_date")
+            if not fecha_str:
+                continue
 
-            # Filtrar solo los partidos de HOY
+            # Parsear la fecha (formato: mm/dd/yyyy HH:MM)
+            fecha_local = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+            fecha_local = tz_local.localize(fecha_local)
+
             if fecha_local.date() == hoy:
-                descripcion += (
-                    f"⚽ {match['home']} vs {match['away']} "
-                    f"({fecha_local.strftime('%H:%M')})\n"
-                )
+                home = match.get("home_team_name_en", "???")
+                away = match.get("away_team_name_en", "???")
+                descripcion += f"⚽ {home} vs {away} ({fecha_local.strftime('%H:%M')})\n"
 
         if not descripcion:
             descripcion = "🌙 No hay partidos programados para hoy"
@@ -333,6 +333,7 @@ async def partidoshoy(interaction: discord.Interaction):
             f"❌ Error obteniendo partidos: {e}",
             ephemeral=True
         )
+
 
 
 # ==========================
