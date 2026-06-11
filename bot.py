@@ -295,22 +295,27 @@ async def statuspowerland(interaction: discord.Interaction):
 async def partidoshoy(interaction: discord.Interaction):
     try:
         response = requests.get("https://worldcup26.ir/get/games")
-        print(response.text)
         data = response.json()
+
+        # La API devuelve un objeto con "games"
+        games = data.get("games", [])
 
         tz_local = pytz.timezone("America/Lima")
         hoy = datetime.now(tz_local).date()
 
         descripcion = ""
-        for match in data:
-            # La API devuelve local_date como string tipo "06/11/2026 13:00"
+        for match in games:
             fecha_str = match.get("local_date")
             if not fecha_str:
                 continue
 
-            # Parsear la fecha (formato: mm/dd/yyyy HH:MM)
-            fecha_local = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
-            fecha_local = tz_local.localize(fecha_local)
+            # Parsear fecha en formato MM/DD/YYYY HH:MM
+            try:
+                fecha_local = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+                fecha_local = tz_local.localize(fecha_local)
+            except Exception as e:
+                print(f"Error parseando fecha {fecha_str}: {e}")
+                continue
 
             if fecha_local.date() == hoy:
                 home = match.get("home_team_name_en", "???")
