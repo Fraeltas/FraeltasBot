@@ -295,6 +295,7 @@ async def statuspowerland(interaction: discord.Interaction):
 async def partidoshoy(interaction: discord.Interaction):
     try:
         response = requests.get("https://worldcup26.ir/get/games")
+        print(response.text)
         data = response.json()
 
         tz_local = pytz.timezone("America/Lima")
