@@ -18,6 +18,33 @@ retry = Retry(
 adapter = HTTPAdapter(max_retries=retry)
 session.mount("https://", adapter)
 
+# ==========================
+# CACHE DE API
+# ==========================
+
+cache_games = None
+cache_timestamp = None
+CACHE_TTL = 300  # segundos (5 minutos)
+
+def get_games():
+    global cache_games, cache_timestamp
+
+    ahora = datetime.now()
+    if cache_games and cache_timestamp and (ahora - cache_timestamp).seconds < CACHE_TTL:
+        # Usar datos cacheados
+        return cache_games
+
+    try:
+        response = session.get("https://worldcup26.ir/get/games", timeout=10)
+        data = response.json()
+        cache_games = data.get("games", [])
+        cache_timestamp = ahora
+        return cache_games
+    except requests.exceptions.RequestException as e:
+        print(f"Error conectando a API: {e}")
+        # Si falla, devolver lo último cacheado aunque esté viejo
+        return cache_games if cache_games else []
+
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -400,9 +427,7 @@ async def partidoshoy(interaction: discord.Interaction):
         # Avisar a Discord que estás procesando
         await interaction.response.defer()
 
-        response = requests.get("https://worldcup26.ir/get/games")
-        data = response.json()
-        games = data.get("games", [])
+        games = get_games()
 
         tz_lima = pytz.timezone("America/Lima")
         hoy = datetime.now(tz_lima).date()
@@ -457,9 +482,7 @@ async def resultadosayer(interaction: discord.Interaction):
     try:
         await interaction.response.defer()
 
-        response = requests.get("https://worldcup26.ir/get/games")
-        data = response.json()
-        games = data.get("games", [])
+        games = get_games()
 
         tz_lima = pytz.timezone("America/Lima")
         hoy = datetime.now(tz_lima).date()
@@ -516,9 +539,7 @@ async def partidosmañana(interaction: discord.Interaction):
     try:
         await interaction.response.defer()
 
-        response = requests.get("https://worldcup26.ir/get/games", timeout=10)
-        data = response.json()
-        games = data.get("games", [])
+        games = get_games()
 
         tz_lima = pytz.timezone("America/Lima")
         hoy = datetime.now(tz_lima).date()
@@ -574,9 +595,7 @@ async def cr7(interaction: discord.Interaction):
     try:
         await interaction.response.defer()
 
-        response = requests.get("https://worldcup26.ir/get/games")
-        data = response.json()
-        games = data.get("games", [])
+        games = get_games()
 
         tz_lima = pytz.timezone("America/Lima")
         hoy = datetime.now(tz_lima)
