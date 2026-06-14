@@ -6,6 +6,17 @@ from discord.ext import commands, tasks
 from mcstatus import JavaServer
 from datetime import datetime
 from datetime import datetime, timedelta
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
+# Configurar sesión con reintentos
+session = requests.Session()
+retry = Retry(
+    total=3,                # hasta 3 intentos
+    backoff_factor=1,       # espera progresiva: 1s, 2s, 4s...
+    status_forcelist=[429, 500, 502, 503, 504]
+)
+adapter = HTTPAdapter(max_retries=retry)
+session.mount("https://", adapter)
 
 
 intents = discord.Intents.default()
@@ -505,7 +516,7 @@ async def partidosmañana(interaction: discord.Interaction):
     try:
         await interaction.response.defer()
 
-        response = requests.get("https://worldcup26.ir/get/games")
+        response = requests.get("https://worldcup26.ir/get/games"), timeout=10
         data = response.json()
         games = data.get("games", [])
 
@@ -548,11 +559,12 @@ async def partidosmañana(interaction: discord.Interaction):
 
         await interaction.followup.send(embed=embed)
 
-    except Exception as e:
+    except requests.exceptions.RequestException:
         await interaction.followup.send(
-            f"❌ Error obteniendo partidos: {e}",
+            "🌐 La API de partidos está tardando en responder. Intenta de nuevo en unos minutos.",
             ephemeral=True
-        )
+    )
+    return
 
 @bot.tree.command(
     name="cr7",
