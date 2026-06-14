@@ -5,6 +5,8 @@ import pytz
 from discord.ext import commands, tasks
 from mcstatus import JavaServer
 from datetime import datetime
+from datetime import datetime, timedelta
+
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -290,22 +292,28 @@ async def statuspowerland(interaction: discord.Interaction):
 
 # Diccionario de estadios y sus zonas horarias
 stadium_timezones = {
-    "1": "America/Mexico_City",   # Estadio Azteca (CDMX)
-    "2": "America/Monterrey",     # Estadio BBVA (Monterrey)
-    "7": "America/Mexico_City",   # Estadio Akron (Guadalajara)
-    "10": "America/New_York",     # MetLife Stadium (Nueva Jersey)
-    "11": "America/Los_Angeles",  # SoFi Stadium (Los Ángeles)
-    "12": "America/Chicago",      # AT&T Stadium (Dallas)
-    "13": "America/Vancouver",    # BC Place (Vancouver)
-    "14": "America/Toronto",      # BMO Field (Toronto)
-    "15": "America/New_York",     # Gillette Stadium (Boston)
-    "16": "America/Chicago",      # Mercedes-Benz Stadium (Atlanta)
-    "3": "America/Chicago",       # NRG Stadium (Houston)
-    "4": "America/Chicago",       # Arrowhead Stadium (Kansas City)
-    "5": "America/Chicago",       # Soldier Field (Chicago)
-    "6": "America/Los_Angeles",   # Levi's Stadium (San Francisco)
-    "8": "America/New_York",      # Lincoln Financial Field (Philadelphia)
-    "9": "America/Orlando",       # Camping World Stadium (Orlando)
+    # Estados Unidos
+    "atlanta": "America/New_York",
+    "boston": "America/New_York",
+    "dallas": "America/Chicago",
+    "houston": "America/Chicago",
+    "kansas_city": "America/Chicago",
+    "los_angeles": "America/Los_Angeles",
+    "miami": "America/New_York",
+    "new_york_new_jersey": "America/New_York",
+    "orlando": "America/New_York",   # Orlando usa la misma zona que NY
+    "philadelphia": "America/New_York",
+    "san_francisco": "America/Los_Angeles",
+    "seattle": "America/Los_Angeles",
+
+    # México
+    "guadalajara": "America/Mexico_City",
+    "mexico_city": "America/Mexico_City",
+    "monterrey": "America/Monterrey",
+
+    # Canadá
+    "toronto": "America/Toronto",
+    "vancouver": "America/Vancouver",
 }
 
     # agrega más stadium_id según la lista oficial
