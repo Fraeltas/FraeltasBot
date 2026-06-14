@@ -378,6 +378,9 @@ flags = {
 )
 async def partidoshoy(interaction: discord.Interaction):
     try:
+        # Avisar a Discord que estás procesando
+        await interaction.response.defer()
+
         response = requests.get("https://worldcup26.ir/get/games")
         data = response.json()
         games = data.get("games", [])
@@ -392,10 +395,8 @@ async def partidoshoy(interaction: discord.Interaction):
             if not fecha_str or not stadium_id:
                 continue
 
-            # Parsear fecha en formato MM/DD/YYYY HH:MM
             try:
                 fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
-                # Convertir desde la zona horaria de la sede a Lima
                 tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
                 fecha_local_sede = tz_sede.localize(fecha_local_sede)
                 fecha_lima = fecha_local_sede.astimezone(tz_lima)
@@ -420,13 +421,201 @@ async def partidoshoy(interaction: discord.Interaction):
         )
         embed.set_footer(text=f"Hora local: {tz_lima.zone}")
 
-        await interaction.response.send_message(embed=embed)
+        # Responder con followup
+        await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"❌ Error obteniendo partidos: {e}",
             ephemeral=True
         )
+
+@bot.tree.command(
+    name="resultadosayer",
+    description="Muestra los resultados del Mundial 2026 del día anterior en hora de Lima"
+)
+async def resultadosayer(interaction: discord.Interaction):
+    try:
+        await interaction.response.defer()
+
+        response = requests.get("https://worldcup26.ir/get/games")
+        data = response.json()
+        games = data.get("games", [])
+
+        tz_lima = pytz.timezone("America/Lima")
+        hoy = datetime.now(tz_lima).date()
+        ayer = hoy - timedelta(days=1)
+
+        descripcion = ""
+        for match in games:
+            fecha_str = match.get("local_date")
+            stadium_id = match.get("stadium_id")
+            if not fecha_str or not stadium_id:
+                continue
+
+            try:
+                fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+                tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
+                fecha_local_sede = tz_sede.localize(fecha_local_sede)
+                fecha_lima = fecha_local_sede.astimezone(tz_lima)
+            except Exception as e:
+                print(f"Error parseando fecha {fecha_str}: {e}")
+                continue
+
+            if fecha_lima.date() == ayer:
+                home = match.get("home_team_name_en", "???")
+                away = match.get("away_team_name_en", "???")
+                score_home = match.get("home_score", "-")
+                score_away = match.get("away_score", "-")
+                flag_home = flags.get(home, "")
+                flag_away = flags.get(away, "")
+                descripcion += f"{flag_home} {home} {score_home} - {score_away} {away} {flag_away}\n"
+
+        if not descripcion:
+            descripcion = "🌙 No hubo partidos ayer"
+
+        embed = discord.Embed(
+            title="📊 Resultados de Ayer - Mundial 2026",
+            description=descripcion,
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Hora local: {tz_lima.zone}")
+
+        await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        await interaction.followup.send(
+            f"❌ Error obteniendo resultados: {e}",
+            ephemeral=True
+        )
+
+@bot.tree.command(
+    name="partidosmañana",
+    description="Muestra los partidos del Mundial 2026 para mañana en hora de Lima"
+)
+async def partidosmañana(interaction: discord.Interaction):
+    try:
+        await interaction.response.defer()
+
+        response = requests.get("https://worldcup26.ir/get/games")
+        data = response.json()
+        games = data.get("games", [])
+
+        tz_lima = pytz.timezone("America/Lima")
+        hoy = datetime.now(tz_lima).date()
+        manana = hoy + timedelta(days=1)
+
+        descripcion = ""
+        for match in games:
+            fecha_str = match.get("local_date")
+            stadium_id = match.get("stadium_id")
+            if not fecha_str or not stadium_id:
+                continue
+
+            try:
+                fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+                tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
+                fecha_local_sede = tz_sede.localize(fecha_local_sede)
+                fecha_lima = fecha_local_sede.astimezone(tz_lima)
+            except Exception as e:
+                print(f"Error parseando fecha {fecha_str}: {e}")
+                continue
+
+            if fecha_lima.date() == manana:
+                home = match.get("home_team_name_en", "???")
+                away = match.get("away_team_name_en", "???")
+                flag_home = flags.get(home, "")
+                flag_away = flags.get(away, "")
+                descripcion += f"{flag_home} {home} vs {away} {flag_away} ({fecha_lima.strftime('%H:%M')})\n"
+
+        if not descripcion:
+            descripcion = "🌙 No hay partidos programados para mañana"
+
+        embed = discord.Embed(
+            title="📅 Partidos de Mañana - Mundial 2026",
+            description=descripcion,
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Hora local: {tz_lima.zone}")
+
+        await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        await interaction.followup.send(
+            f"❌ Error obteniendo partidos: {e}",
+            ephemeral=True
+        )
+
+@bot.tree.command(
+    name="cr7",
+    description="Muestra el próximo partido de Cristiano Ronaldo (Portugal) en hora de Lima"
+)
+async def cr7(interaction: discord.Interaction):
+    try:
+        await interaction.response.defer()
+
+        response = requests.get("https://worldcup26.ir/get/games")
+        data = response.json()
+        games = data.get("games", [])
+
+        tz_lima = pytz.timezone("America/Lima")
+        hoy = datetime.now(tz_lima)
+
+        proximo_partido = None
+
+        for match in games:
+            fecha_str = match.get("local_date")
+            stadium_id = match.get("stadium_id")
+            if not fecha_str or not stadium_id:
+                continue
+
+            try:
+                fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+                tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
+                fecha_local_sede = tz_sede.localize(fecha_local_sede)
+                fecha_lima = fecha_local_sede.astimezone(tz_lima)
+            except Exception as e:
+                print(f"Error parseando fecha {fecha_str}: {e}")
+                continue
+
+            home = match.get("home_team_name_en", "???")
+            away = match.get("away_team_name_en", "???")
+
+            # Filtrar partidos de Portugal
+            if home == "Portugal" or away == "Portugal":
+                if fecha_lima > hoy:
+                    if not proximo_partido or fecha_lima < proximo_partido["fecha"]:
+                        proximo_partido = {
+                            "home": home,
+                            "away": away,
+                            "fecha": fecha_lima
+                        }
+
+        if not proximo_partido:
+            descripcion = "❌ No hay partidos próximos de Portugal en el calendario."
+        else:
+            flag_home = flags.get(proximo_partido["home"], "")
+            flag_away = flags.get(proximo_partido["away"], "")
+            descripcion = (
+                f"{flag_home} {proximo_partido['home']} vs {proximo_partido['away']} {flag_away}\n"
+                f"📅 {proximo_partido['fecha'].strftime('%d/%m/%Y %H:%M')} (hora Lima)"
+            )
+
+        embed = discord.Embed(
+            title="🇵🇹 Próximo Partido de Cristiano Ronaldo",
+            description=descripcion,
+            color=discord.Color.red()
+        )
+        embed.set_footer(text=f"Hora local: {tz_lima.zone}")
+
+        await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        await interaction.followup.send(
+            f"❌ Error obteniendo partidos: {e}",
+            ephemeral=True
+        )
+
 
 
 
