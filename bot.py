@@ -2,73 +2,71 @@ import os
 import discord
 import requests
 import pytz
+import asyncio
 from discord.ext import commands, tasks
 from mcstatus import JavaServer
-from datetime import datetime
 from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
-# Configurar sesión con reintentos
+
+# ==========================
+# SESIÓN HTTP CON REINTENTOS
+# ==========================
+
 session = requests.Session()
-retry = Retry(
-    total=3,                # hasta 3 intentos
-    backoff_factor=1,       # espera progresiva: 1s, 2s, 4s...
-    status_forcelist=[429, 500, 502, 503, 504]
-)
+retry = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
 adapter = HTTPAdapter(max_retries=retry)
 session.mount("https://", adapter)
 
 # ==========================
-# CACHE DE API
+# CACHE DIARIO DE PARTIDOS
 # ==========================
 
 cache_games = None
-cache_timestamp = None
-CACHE_TTL = 300  # segundos (5 minutos)
+cache_fecha = None
 
-def get_games():
-    global cache_games, cache_timestamp
+async def fetch_games():
+    """Petición asíncrona para no bloquear el loop"""
+    def _fetch():
+        response = session.get("https://worldcup26.ir/get/games", timeout=10)
+        return response.json()
+    return await asyncio.to_thread(_fetch)
 
-    ahora = datetime.now()
-    if cache_games and cache_timestamp and (ahora - cache_timestamp).seconds < CACHE_TTL:
-        # Usar datos cacheados
+async def get_games():
+    """Devuelve partidos cacheados o refresca si cambió el día"""
+    global cache_games, cache_fecha
+    tz_lima = pytz.timezone("America/Lima")
+    hoy = datetime.now(tz_lima).date()
+
+    if cache_games and cache_fecha == hoy:
         return cache_games
 
     try:
-        response = session.get("https://worldcup26.ir/get/games", timeout=10)
-        data = response.json()
+        data = await fetch_games()
         cache_games = data.get("games", [])
-        cache_timestamp = ahora
+        cache_fecha = hoy
         return cache_games
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         print(f"Error conectando a API: {e}")
-        # Si falla, devolver lo último cacheado aunque esté viejo
         return cache_games if cache_games else []
 
+# ==========================
+# CONFIGURACIÓN DISCORD BOT
+# ==========================
 
 intents = discord.Intents.default()
 intents.message_content = True
-
 bot = commands.Bot(command_prefix="!", intents=intents)
-
-# ==========================
-# CONFIGURACIÓN
-# ==========================
 
 SERVER_ADDRESS = "CochinitosLand4.exaroton.me:61042"
 CANAL_ID = 1499557785363550228
-
 MAX_FALLOS = 5
-
-# ==========================
-# VARIABLES
-# ==========================
 
 estado_anterior = None
 fallos_consecutivos = 0
 
 # ==========================
-# ESTADOS ROTATIVOS
+# ESTADOS ROTATIVOS DEL BOT
 # ==========================
 
 estados = [
@@ -77,35 +75,18 @@ estados = [
     ("Viendo las olas 🌊", discord.ActivityType.watching)
 ]
 
-# ==========================
-# READY
-# ==========================
-
 @bot.event
 async def on_ready():
     synced = await bot.tree.sync()
-
     print(f"Bot conectado como {bot.user}")
     print(f"Comandos sincronizados: {[cmd.name for cmd in synced]}")
-
     cambiar_estado.start()
     check_server.start()
-
-# ==========================
-# ESTADO DEL BOT
-# ==========================
 
 @tasks.loop(hours=1)
 async def cambiar_estado():
     texto, tipo = estados[cambiar_estado.current_loop % len(estados)]
-
-    await bot.change_presence(
-        activity=discord.Activity(
-            type=tipo,
-            name=texto
-        ),
-        status=discord.Status.online
-    )
+    await bot.change_presence(activity=discord.Activity(type=tipo, name=texto), status=discord.Status.online)
 
 # ==========================
 # MONITOR MINECRAFT
@@ -113,222 +94,87 @@ async def cambiar_estado():
 
 @tasks.loop(minutes=1)
 async def check_server():
-    global estado_anterior
-    global fallos_consecutivos
-
+    global estado_anterior, fallos_consecutivos
     canal = bot.get_channel(CANAL_ID)
 
     try:
-
         server = JavaServer.lookup(SERVER_ADDRESS)
-
         status = server.status()
+        protocol = status.raw.get("version", {}).get("protocol")
+        version_name = str(status.raw.get("version", {}).get("name", "")).lower()
 
-        print("\n" + "=" * 60)
-        print("RESPUESTA DEL SERVIDOR")
-        print(f"Latencia: {status.latency:.0f} ms")
-        print(status.raw)
-        print("=" * 60)
-
-        protocol = (
-            status.raw
-            .get("version", {})
-            .get("protocol")
-        )
-
-        version_name = str(
-            status.raw
-            .get("version", {})
-            .get("name", "")
-        ).lower()
-
-        # Exaroton responde aunque esté apagado
-        if protocol == -1:
-            raise Exception(
-                "Exaroton reporta servidor OFFLINE"
-            )
-
-        if "offline" in version_name:
-            raise Exception(
-                f"Version reporta OFFLINE: {version_name}"
-            )
+        if protocol == -1 or "offline" in version_name:
+            raise Exception("Servidor OFFLINE")
 
         fallos_consecutivos = 0
 
         if estado_anterior != "online":
-
             jugadores = status.players.sample
+            lista = "\n".join(f"• {j.name}" for j in jugadores) if jugadores else ""
+            descripcion = f"🟢 ONLINE\n👥 {status.players.online}\n{lista}"
 
-            if jugadores:
-
-                lista = "\n".join(
-                    f"• {j.name}"
-                    for j in jugadores
-                )
-
-                descripcion = (
-                    f"🟢 El servidor está **ONLINE**\n\n"
-                    f"👥 Jugadores conectados: "
-                    f"**{status.players.online}**\n\n"
-                    f"{lista}"
-                )
-
-            else:
-
-                descripcion = (
-                    f"🟢 El servidor está **ONLINE**\n\n"
-                    f"👥 Jugadores conectados: "
-                    f"**{status.players.online}**"
-                )
-
-            embed = discord.Embed(
-                title="💎⚔️ POWERLAND ⛏️💎",
-                description=descripcion,
-                color=discord.Color.green()
-            )
-
-            embed.set_thumbnail(
-                url="https://i.imgur.com/rqFaiGG.jpeg"
-            )
-
-            embed.set_footer(
-                text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}"
-            )
-
+            embed = discord.Embed(title="💎⚔️ POWERLAND ⛏️💎", description=descripcion, color=discord.Color.green())
+            embed.set_footer(text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}")
             await canal.send(embed=embed)
-
             print("🟢 CAMBIO A ONLINE")
 
         estado_anterior = "online"
 
     except Exception as e:
-
         fallos_consecutivos += 1
-
-        print(
-            f"\n❌ Error consultando servidor "
-            f"({fallos_consecutivos}/{MAX_FALLOS})"
-        )
-
+        print(f"❌ Error consultando servidor ({fallos_consecutivos}/{MAX_FALLOS})")
         print(e)
 
-        if fallos_consecutivos >= MAX_FALLOS:
-
-            if estado_anterior != "offline":
-
-                embed = discord.Embed(
-                    title="💎⚔️ POWERLAND ⛏️💎",
-                    description="🔴 El servidor está **OFFLINE**.",
-                    color=discord.Color.red()
-                )
-
-                embed.set_thumbnail(
-                    url="https://i.imgur.com/rqFaiGG.jpeg"
-                )
-
-                embed.set_footer(
-                    text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}"
-                )
-
-                await canal.send(embed=embed)
-
-                print("🔴 CAMBIO A OFFLINE")
-
+        if fallos_consecutivos >= MAX_FALLOS and estado_anterior != "offline":
+            embed = discord.Embed(title="💎⚔️ POWERLAND ⛏️💎", description="🔴 OFFLINE", color=discord.Color.red())
+            embed.set_footer(text=f"Detectado a las {datetime.now().strftime('%H:%M:%S')}")
+            await canal.send(embed=embed)
+            print("🔴 CAMBIO A OFFLINE")
             estado_anterior = "offline"
 
 # ==========================
 # COMANDO HILOS
 # ==========================
 
-@bot.tree.command(
-    name="hilos",
-    description="Crear un hilo con título, mensaje y archivo"
-)
-async def hilos(
-    interaction: discord.Interaction,
-    titulo: str,
-    mensaje: str,
-    archivo: discord.Attachment = None
-):
-
+@bot.tree.command(name="hilos", description="Crear un hilo con título, mensaje y archivo")
+async def hilos(interaction: discord.Interaction, titulo: str, mensaje: str, archivo: discord.Attachment = None):
     contenido = mensaje
-
     if archivo:
         contenido += f"\n{archivo.url}"
-
     await interaction.response.send_message(contenido)
-
     msg = await interaction.original_response()
-
     await msg.create_thread(name=titulo)
 
 # ==========================
 # COMANDO STATUS POWERLAND
 # ==========================
 
-@bot.tree.command(
-    name="statuspowerland",
-    description="Estado actual de Powerland"
-)
+@bot.tree.command(name="statuspowerland", description="Estado actual de Powerland")
 async def statuspowerland(interaction: discord.Interaction):
-
-    print("COMANDO /statuspowerland EJECUTADO")
-
     try:
         server = JavaServer.lookup(SERVER_ADDRESS)
-
-        try:
-            status = server.status()
-        except Exception as e:
-            print(f"Primer intento falló: {e}, reintentando...")
-            # Reintento inmediato
-            server = JavaServer.lookup(SERVER_ADDRESS)
-            status = server.status()
-
-        protocol = status.raw.get("version", {}).get("protocol")
-        version_name = str(status.raw.get("version", {}).get("name", "")).lower()
-
-        if protocol == -1 or "offline" in version_name:
-            raise Exception("Servidor reportado como OFFLINE")
-
+        status = server.status()
         jugadores = status.players.sample
-        lista = "\n".join(f"🟢 {j.name}" for j in jugadores) if jugadores else "🌙 No hay jugadores conectados"
+        lista = "\n".join(f"🟢 {j.name}" for j in jugadores) if jugadores else "🌙 No hay jugadores"
 
-        embed = discord.Embed(
-            title="⚔️ Estado de Powerland ⚔️",
-            description="🟢 **Servidor ONLINE**",
-            color=discord.Color.green(),
-            timestamp=datetime.now()
-        )
-        embed.set_thumbnail(url="https://i.imgur.com/rqFaiGG.jpeg")
+        embed = discord.Embed(title="⚔️ Estado de Powerland ⚔️", description="🟢 ONLINE", color=discord.Color.green(), timestamp=datetime.now())
         embed.add_field(name="👥 Jugadores", value=f"{status.players.online}/{status.players.max}", inline=True)
         embed.add_field(name="📡 Ping", value=f"{status.latency:.0f} ms", inline=True)
         embed.add_field(name="🕒 Consulta", value=datetime.now().strftime("%H:%M:%S"), inline=True)
         embed.add_field(name="🌐 Dirección", value=SERVER_ADDRESS, inline=False)
         embed.add_field(name="🎮 Conectados", value=lista, inline=False)
-        embed.set_footer(text="Consultado desde FraeltasBot")
-
         await interaction.response.send_message(embed=embed)
 
-    except Exception as e:
-        print(f"Error en /statuspowerland: {e}")
-        embed = discord.Embed(
-            title="⚔️ Estado de Powerland ⚔️",
-            description="🔴 **Servidor OFFLINE**",
-            color=discord.Color.red(),
-            timestamp=datetime.now()
-        )
-        embed.set_thumbnail(url="https://i.imgur.com/rqFaiGG.jpeg")
+    except Exception:
+        embed = discord.Embed(title="⚔️ Estado de Powerland ⚔️", description="🔴 OFFLINE", color=discord.Color.red(), timestamp=datetime.now())
         embed.add_field(name="🌐 Dirección", value=SERVER_ADDRESS, inline=False)
         embed.add_field(name="🕒 Consulta", value=datetime.now().strftime("%H:%M:%S"), inline=True)
-        embed.set_footer(text="Consultado desde FraeltasBot")
         await interaction.response.send_message(embed=embed)
 
 # ==========================
-# MUNDIAL26 COMANDO PARTIDOS HOY
+# MUNDIAL 2026 COMANDOS
 # ==========================
 
-# Diccionario de estadios y sus zonas horarias
 stadium_timezones = {
     # Estados Unidos
     "atlanta": "America/New_York",
@@ -415,251 +261,154 @@ flags = {
     "Peru": "🇵🇪",
 }
 
-    # puedes ir agregando más
+# ==========================
+# COMANDOS MUNDIAL 2026
+# ==========================
 
-
-@bot.tree.command(
-    name="partidoshoy",
-    description="Muestra los partidos del Mundial 2026 para hoy en hora de Lima"
-)
+@bot.tree.command(name="partidoshoy", description="Partidos del Mundial 2026 para hoy en hora Lima")
 async def partidoshoy(interaction: discord.Interaction):
-    try:
-        # Avisar a Discord que estás procesando
-        await interaction.response.defer()
+    await interaction.response.defer()
+    games = await get_games()
+    tz_lima = pytz.timezone("America/Lima")
+    hoy = datetime.now(tz_lima).date()
 
-        games = get_games()
-
-        tz_lima = pytz.timezone("America/Lima")
-        hoy = datetime.now(tz_lima).date()
-
-        descripcion = ""
-        for match in games:
-            fecha_str = match.get("local_date")
-            stadium_id = match.get("stadium_id")
-            if not fecha_str or not stadium_id:
-                continue
-
-            try:
-                fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
-                tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
-                fecha_local_sede = tz_sede.localize(fecha_local_sede)
-                fecha_lima = fecha_local_sede.astimezone(tz_lima)
-            except Exception as e:
-                print(f"Error parseando fecha {fecha_str}: {e}")
-                continue
-
-            if fecha_lima.date() == hoy:
-                home = match.get("home_team_name_en", "???")
-                away = match.get("away_team_name_en", "???")
-                flag_home = flags.get(home, "")
-                flag_away = flags.get(away, "")
-                descripcion += f"{flag_home} {home} vs {away} {flag_away} ({fecha_lima.strftime('%H:%M')})\n"
-
-        if not descripcion:
-            descripcion = "🌙 No hay partidos programados para hoy"
-
-        embed = discord.Embed(
-            title="📅 Partidos de Hoy - Mundial 2026",
-            description=descripcion,
-            color=discord.Color.gold()
-        )
-        embed.set_footer(text=f"Hora local: {tz_lima.zone}")
-
-        # Responder con followup
-        await interaction.followup.send(embed=embed)
-
-    except Exception as e:
-        await interaction.followup.send(
-            f"❌ Error obteniendo partidos: {e}",
-            ephemeral=True
-        )
-
-@bot.tree.command(
-    name="resultadosayer",
-    description="Muestra los resultados del Mundial 2026 del día anterior en hora de Lima"
-)
-async def resultadosayer(interaction: discord.Interaction):
-    try:
-        await interaction.response.defer()
-
-        games = get_games()
-
-        tz_lima = pytz.timezone("America/Lima")
-        hoy = datetime.now(tz_lima).date()
-        ayer = hoy - timedelta(days=1)
-
-        descripcion = ""
-        for match in games:
-            fecha_str = match.get("local_date")
-            stadium_id = match.get("stadium_id")
-            if not fecha_str or not stadium_id:
-                continue
-
-            try:
-                fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
-                tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
-                fecha_local_sede = tz_sede.localize(fecha_local_sede)
-                fecha_lima = fecha_local_sede.astimezone(tz_lima)
-            except Exception as e:
-                print(f"Error parseando fecha {fecha_str}: {e}")
-                continue
-
-            if fecha_lima.date() == ayer:
-                home = match.get("home_team_name_en", "???")
-                away = match.get("away_team_name_en", "???")
-                score_home = match.get("home_score", "-")
-                score_away = match.get("away_score", "-")
-                flag_home = flags.get(home, "")
-                flag_away = flags.get(away, "")
-                descripcion += f"{flag_home} {home} {score_home} - {score_away} {away} {flag_away}\n"
-
-        if not descripcion:
-            descripcion = "🌙 No hubo partidos ayer"
-
-        embed = discord.Embed(
-            title="📊 Resultados de Ayer - Mundial 2026",
-            description=descripcion,
-            color=discord.Color.blue()
-        )
-        embed.set_footer(text=f"Hora local: {tz_lima.zone}")
-
-        await interaction.followup.send(embed=embed)
-
-    except Exception as e:
-        await interaction.followup.send(
-            f"❌ Error obteniendo resultados: {e}",
-            ephemeral=True
-        )
-
-@bot.tree.command(
-    name="partidosmañana",
-    description="Muestra los partidos del Mundial 2026 para mañana en hora de Lima"
-)
-async def partidosmañana(interaction: discord.Interaction):
-    try:
-        await interaction.response.defer()
-
-        games = get_games()
-
-        tz_lima = pytz.timezone("America/Lima")
-        hoy = datetime.now(tz_lima).date()
-        manana = hoy + timedelta(days=1)
-
-        descripcion = ""
-        for match in games:
-            fecha_str = match.get("local_date")
-            stadium_id = match.get("stadium_id")
-            if not fecha_str or not stadium_id:
-                continue
-
-            try:
-                fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
-                tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
-                fecha_local_sede = tz_sede.localize(fecha_local_sede)
-                fecha_lima = fecha_local_sede.astimezone(tz_lima)
-            except Exception as e:
-                print(f"Error parseando fecha {fecha_str}: {e}")
-                continue
-
-            if fecha_lima.date() == manana:
-                home = match.get("home_team_name_en", "???")
-                away = match.get("away_team_name_en", "???")
-                flag_home = flags.get(home, "")
-                flag_away = flags.get(away, "")
-                descripcion += f"{flag_home} {home} vs {away} {flag_away} ({fecha_lima.strftime('%H:%M')})\n"
-
-        if not descripcion:
-            descripcion = "🌙 No hay partidos programados para mañana"
-
-        embed = discord.Embed(
-            title="📅 Partidos de Mañana - Mundial 2026",
-            description=descripcion,
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"Hora local: {tz_lima.zone}")
-
-        await interaction.followup.send(embed=embed)
-
-    except requests.exceptions.RequestException:
-        await interaction.followup.send(
-            "🌐 La API de partidos está tardando en responder. Intenta de nuevo en unos minutos.",
-            ephemeral=True
-    )
-    return
-
-@bot.tree.command(
-    name="cr7",
-    description="Muestra el próximo partido de Cristiano Ronaldo (Portugal) en hora de Lima"
-)
-async def cr7(interaction: discord.Interaction):
-    try:
-        await interaction.response.defer()
-
-        games = get_games()
-
-        tz_lima = pytz.timezone("America/Lima")
-        hoy = datetime.now(tz_lima)
-
-        proximo_partido = None
-
-        for match in games:
-            fecha_str = match.get("local_date")
-            stadium_id = match.get("stadium_id")
-            if not fecha_str or not stadium_id:
-                continue
-
-            try:
-                fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
-                tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
-                fecha_local_sede = tz_sede.localize(fecha_local_sede)
-                fecha_lima = fecha_local_sede.astimezone(tz_lima)
-            except Exception as e:
-                print(f"Error parseando fecha {fecha_str}: {e}")
-                continue
-
+    descripcion = ""
+    for match in games:
+        fecha_str = match.get("local_date")
+        stadium_id = match.get("stadium_id")
+        if not fecha_str or not stadium_id:
+            continue
+        try:
+            fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+            tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
+            fecha_local_sede = tz_sede.localize(fecha_local_sede)
+            fecha_lima = fecha_local_sede.astimezone(tz_lima)
+        except:
+            continue
+        if fecha_lima.date() == hoy:
             home = match.get("home_team_name_en", "???")
             away = match.get("away_team_name_en", "???")
+            descripcion += f"{flags.get(home,'')} {home} vs {away} {flags.get(away,'')} ({fecha_lima.strftime('%H:%M')})\n"
 
-            # Filtrar partidos de Portugal
-            if home == "Portugal" or away == "Portugal":
-                if fecha_lima > hoy:
-                    if not proximo_partido or fecha_lima < proximo_partido["fecha"]:
-                        proximo_partido = {
-                            "home": home,
-                            "away": away,
-                            "fecha": fecha_lima
-                        }
+    if not descripcion:
+        descripcion = "🌙 No hay partidos programados para hoy"
 
-        if not proximo_partido:
-            descripcion = "❌ No hay partidos próximos de Portugal en el calendario."
-        else:
-            flag_home = flags.get(proximo_partido["home"], "")
-            flag_away = flags.get(proximo_partido["away"], "")
-            descripcion = (
-                f"{flag_home} {proximo_partido['home']} vs {proximo_partido['away']} {flag_away}\n"
-                f"📅 {proximo_partido['fecha'].strftime('%d/%m/%Y %H:%M')} (hora Lima)"
-            )
+    embed = discord.Embed(title="📅 Partidos de Hoy - Mundial 2026", description=descripcion, color=discord.Color.gold())
+    embed.set_footer(text=f"Hora local: {tz_lima.zone}")
+    await interaction.followup.send(embed=embed)
 
-        embed = discord.Embed(
-            title="🇵🇹 Próximo Partido de Cristiano Ronaldo",
-            description=descripcion,
-            color=discord.Color.red()
+
+@bot.tree.command(name="partidosmañana", description="Partidos del Mundial 2026 para mañana en hora Lima")
+async def partidosmañana(interaction: discord.Interaction):
+    await interaction.response.defer()
+    games = await get_games()
+    tz_lima = pytz.timezone("America/Lima")
+    manana = datetime.now(tz_lima).date() + timedelta(days=1)
+
+    descripcion = ""
+    for match in games:
+        fecha_str = match.get("local_date")
+        stadium_id = match.get("stadium_id")
+        if not fecha_str or not stadium_id:
+            continue
+        try:
+            fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+            tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
+            fecha_local_sede = tz_sede.localize(fecha_local_sede)
+            fecha_lima = fecha_local_sede.astimezone(tz_lima)
+        except:
+            continue
+        if fecha_lima.date() == manana:
+            home = match.get("home_team_name_en", "???")
+            away = match.get("away_team_name_en", "???")
+            descripcion += f"{flags.get(home,'')} {home} vs {away} {flags.get(away,'')} ({fecha_lima.strftime('%H:%M')})\n"
+
+    if not descripcion:
+        descripcion = "🌙 No hay partidos programados para mañana"
+
+    embed = discord.Embed(title="📅 Partidos de Mañana - Mundial 2026", description=descripcion, color=discord.Color.green())
+    embed.set_footer(text=f"Hora local: {tz_lima.zone}")
+    await interaction.followup.send(embed=embed)
+
+
+@bot.tree.command(name="resultadosayer", description="Resultados del Mundial 2026 de ayer en hora Lima")
+async def resultadosayer(interaction: discord.Interaction):
+    await interaction.response.defer()
+    games = await get_games()
+    tz_lima = pytz.timezone("America/Lima")
+    ayer = datetime.now(tz_lima).date() - timedelta(days=1)
+
+    descripcion = ""
+    for match in games:
+        fecha_str = match.get("local_date")
+        stadium_id = match.get("stadium_id")
+        if not fecha_str or not stadium_id:
+            continue
+        try:
+            fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+            tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
+            fecha_local_sede = tz_sede.localize(fecha_local_sede)
+            fecha_lima = fecha_local_sede.astimezone(tz_lima)
+        except:
+            continue
+        if fecha_lima.date() == ayer:
+            home = match.get("home_team_name_en", "???")
+            away = match.get("away_team_name_en", "???")
+            score_home = match.get("home_score", "-")
+            score_away = match.get("away_score", "-")
+            descripcion += f"{flags.get(home,'')} {home} {score_home} - {score_away} {away} {flags.get(away,'')}\n"
+
+    if not descripcion:
+        descripcion = "🌙 No hubo partidos ayer"
+
+    embed = discord.Embed(title="📊 Resultados de Ayer - Mundial 2026", description=descripcion, color=discord.Color.blue())
+    embed.set_footer(text=f"Hora local: {tz_lima.zone}")
+    await interaction.followup.send(embed=embed)
+
+
+@bot.tree.command(name="cr7", description="Próximo partido de Cristiano Ronaldo (Portugal)")
+async def cr7(interaction: discord.Interaction):
+    await interaction.response.defer()
+    games = await get_games()
+    tz_lima = pytz.timezone("America/Lima")
+    ahora = datetime.now(tz_lima)
+
+    proximo = None
+    for match in games:
+        fecha_str = match.get("local_date")
+        stadium_id = match.get("stadium_id")
+        if not fecha_str or not stadium_id:
+            continue
+        try:
+            fecha_local_sede = datetime.strptime(fecha_str, "%m/%d/%Y %H:%M")
+            tz_sede = pytz.timezone(stadium_timezones.get(stadium_id, "America/New_York"))
+            fecha_local_sede = tz_sede.localize(fecha_local_sede)
+            fecha_lima = fecha_local_sede.astimezone(tz_lima)
+        except:
+            continue
+
+        home = match.get("home_team_name_en", "???")
+        away = match.get("away_team_name_en", "???")
+
+        if home == "Portugal" or away == "Portugal":
+            if fecha_lima > ahora:
+                if not proximo or fecha_lima < proximo["fecha"]:
+                    proximo = {"home": home, "away": away, "fecha": fecha_lima}
+
+    if not proximo:
+        descripcion = "❌ No hay partidos próximos de Portugal en el calendario."
+    else:
+        descripcion = (
+            f"{flags.get(proximo['home'],'')} {proximo['home']} vs {proximo['away']} {flags.get(proximo['away'],'')}\n"
+            f"📅 {proximo['fecha'].strftime('%d/%m/%Y %H:%M')} (hora Lima)"
         )
-        embed.set_footer(text=f"Hora local: {tz_lima.zone}")
 
-        await interaction.followup.send(embed=embed)
-
-    except Exception as e:
-        await interaction.followup.send(
-            f"❌ Error obteniendo partidos: {e}",
-            ephemeral=True
-        )
-
-
-
+    embed = discord.Embed(title="🇵🇹 Próximo Partido de Cristiano Ronaldo", description=descripcion, color=discord.Color.red())
+    embed.set_footer(text=f"Hora local: {tz_lima.zone}")
+    await interaction.followup.send(embed=embed)
 
 # ==========================
-# INICIO
+# KEY
 # ==========================
 
 bot.run(os.getenv("DISCORD_TOKEN"))
