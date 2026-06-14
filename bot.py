@@ -516,7 +516,7 @@ async def partidosmañana(interaction: discord.Interaction):
     try:
         await interaction.response.defer()
 
-        response = requests.get("https://worldcup26.ir/get/games"), timeout=10
+        response = requests.get("https://worldcup26.ir/get/games", timeout=10)
         data = response.json()
         games = data.get("games", [])
 
